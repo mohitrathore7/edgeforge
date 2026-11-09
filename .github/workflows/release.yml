@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu   # Jetson, Raspberry Pi 4/5, i.MX 8
+          - armv7-unknown-linux-gnueabihf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: "--release"
+      - name: Package
+        run: |
+          mkdir dist
+          tar -czf dist/edgeforge-${{ github.ref_name }}-${{ matrix.target }}.tar.gz \
+            -C target/${{ matrix.target }}/release edgeforged edgeforge \
+            -C "$GITHUB_WORKSPACE" deploy README.md LICENSE
+          sha256sum dist/*.tar.gz > dist/edgeforge-${{ matrix.target }}.sha256
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
