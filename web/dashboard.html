@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EdgeForge</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e;
+          --ok:#3fb950; --warn:#d29922; --bad:#f85149; --accent:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; letter-spacing:.3px; }
+  header small { color:var(--muted); }
+  main { padding:24px; max-width:1200px; margin:0 auto; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+  .card .k { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px; }
+  .card .v { font-size:24px; font-weight:600; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  th, td { padding:10px 12px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+  tr:last-child td { border-bottom:none; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; border:1px solid currentColor; }
+  .healthy { color:var(--ok); } .starting, .busy, .unknown { color:var(--warn); }
+  .unhealthy, .crash_loop { color:var(--bad); } .stopped { color:var(--muted); }
+  button { background:#21262d; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; }
+  button:hover { border-color:var(--accent); }
+  button.danger:hover { border-color:var(--bad); color:var(--bad); }
+  form { display:flex; gap:8px; margin:20px 0 0; flex-wrap:wrap; }
+  input { flex:1; min-width:260px; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  #msg { margin-top:12px; min-height:20px; color:var(--muted); white-space:pre-wrap; }
+  #msg.err { color:var(--bad); }
+  .mono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; color:var(--muted); }
+  .empty { text-align:center; color:var(--muted); padding:28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>EdgeForge <small>on-device AI lifecycle manager</small></h1>
+  <small><a href="/metrics" style="color:var(--accent)">/metrics</a> · refreshed <span id="ts">–</span></small>
+</header>
+<main>
+  <section class="cards">
+    <div class="card"><div class="k">Apps</div><div class="v" id="c-total">0</div></div>
+    <div class="card"><div class="k">Running</div><div class="v" id="c-running">0</div></div>
+    <div class="card"><div class="k">Healthy</div><div class="v healthy" id="c-healthy">0</div></div>
+    <div class="card"><div class="k">Needs attention</div><div class="v unhealthy" id="c-bad">0</div></div>
+    <div class="card"><div class="k">Memory</div><div class="v" id="c-mem">0 MiB</div></div>
+  </section>
+
+  <table>
+    <thead><tr>
+      <th>App</th><th>Version</th><th>Slot</th><th>Health</th><th>PID</th>
+      <th>Memory</th><th>CPU</th><th>Restarts</th><th>Previous</th><th></th>
+    </tr></thead>
+    <tbody id="apps"><tr><td class="empty" colspan="10">Loading…</td></tr></tbody>
+  </table>
+
+  <form id="install">
+    <input id="source" placeholder="Artifact path or URL, e.g. /opt/artifacts/detector-1.2.0.tar" required>
+    <button type="submit">Install &amp; start</button>
+  </form>
+  <div id="msg"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const mib = (b) => b == null ? "–" : (b / 1048576).toFixed(1) + " MiB";
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function say(text, isErr) { const m = $("msg"); m.textContent = text; m.className = isErr ? "err" : ""; }
+
+async function api(method, path, body) {
+  const res = await fetch(path, { method, headers: {"Content-Type": "application/json"},
+                                  body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || res.statusText);
+  return data;
+}
+
+async function act(name, action) {
+  if (action === "remove" && !confirm(`Remove ${name} and delete both slots?`)) return;
+  if (action === "update") {
+    const src = prompt(`Artifact path or URL for the new version of ${name}:`);
+    if (!src) return;
+    say(`Updating ${name}… (health gate running)`);
+    try { const s = await api("POST", `/api/apps/${name}/update`, {source: src}); say(`${name} updated to v${s.version}`); }
+    catch (e) { say(e.message, true); }
+    return refresh();
+  }
+  try {
+    if (action === "remove") await api("DELETE", `/api/apps/${name}`);
+    else await api("POST", `/api/apps/${name}/${action}`);
+    say(`${action} ${name}: ok`);
+  } catch (e) { say(e.message, true); }
+  refresh();
+}
+
+function row(a) {
+  const btn = (act, label, cls) => `<button class="${cls||""}" onclick="act('${esc(a.name)}','${act}')">${label}</button>`;
+  const controls = a.running ? btn("stop","Stop") + " " + btn("restart","Restart") : btn("start","Start");
+  return `<tr>
+    <td><strong>${esc(a.name)}</strong><div class="mono">${esc((a.manifest_digest||"").slice(0,19))}</div></td>
+    <td>${esc(a.version)}</td>
+    <td>${esc((a.slot||"–").toUpperCase())}</td>
+    <td><span class="pill ${esc(a.health)}">${esc(a.health.replace("_"," "))}</span>
+        ${a.last_error ? `<div class="mono" title="${esc(a.last_error)}">${esc(a.last_error.slice(0,48))}</div>` : ""}</td>
+    <td>${a.pid ?? "–"}</td>
+    <td>${mib(a.memory_bytes)}</td>
+    <td>${a.cpu_seconds == null ? "–" : a.cpu_seconds.toFixed(1) + " s"}</td>
+    <td>${a.restarts}</td>
+    <td>${esc(a.previous_version || "–")}</td>
+    <td>${controls} ${btn("update","Update")} ${a.previous_version ? btn("rollback","Rollback") : ""} ${btn("remove","Remove","danger")}</td>
+  </tr>`;
+}
+
+async function refresh() {
+  try {
+    const apps = await api("GET", "/api/apps");
+    $("apps").innerHTML = apps.length ? apps.map(row).join("")
+      : `<tr><td class="empty" colspan="10">No apps installed yet.</td></tr>`;
+    $("c-total").textContent = apps.length;
+    $("c-running").textContent = apps.filter(a => a.running).length;
+    $("c-healthy").textContent = apps.filter(a => a.health === "healthy").length;
+    $("c-bad").textContent = apps.filter(a => ["unhealthy","crash_loop"].includes(a.health)).length;
+    $("c-mem").textContent = mib(apps.reduce((s, a) => s + (a.memory_bytes || 0), 0));
+    $("ts").textContent = new Date().toLocaleTimeString();
+  } catch (e) { say("daemon unreachable: " + e.message, true); }
+}
+
+$("install").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  say("Installing…");
+  try { const s = await api("POST", "/api/apps", {source: $("source").value, start: true});
+        say(`Installed ${s.name} v${s.version}`); $("source").value = ""; }
+  catch (e) { say(e.message, true); }
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

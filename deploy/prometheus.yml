@@ -1,0 +1,13 @@
+# Minimal Prometheus scrape config for a fleet of EdgeForge devices.
+scrape_configs:
+  - job_name: edgeforge
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - jetson-01.local:9100
+          - rpi-gw-02.local:9100
+        labels:
+          site: lab
+
+rule_files:
+  - alerts.yml

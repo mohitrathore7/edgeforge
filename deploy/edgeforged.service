@@ -1,0 +1,20 @@
+[Unit]
+Description=EdgeForge on-device AI app lifecycle manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/edgeforged --root /var/lib/edgeforge --listen 127.0.0.1:9100
+Restart=always
+RestartSec=2
+# Stop apps gracefully; EdgeForge restarts the ones marked running on next boot.
+KillMode=mixed
+TimeoutStopSec=30
+# EdgeForge manages its own sub-tree under /sys/fs/cgroup/edgeforge.
+Delegate=yes
+StateDirectory=edgeforge
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

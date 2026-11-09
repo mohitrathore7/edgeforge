@@ -1,0 +1,34 @@
+groups:
+  - name: edgeforge
+    rules:
+      - alert: EdgeAppDown
+        expr: edgeforge_app_up == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.app }} is not running on {{ $labels.instance }}"
+
+      - alert: EdgeAppUnhealthy
+        expr: edgeforge_app_healthy == 0 and edgeforge_app_up == 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.app }} fails its health probe on {{ $labels.instance }}"
+
+      - alert: EdgeUpdateRolledBack
+        expr: increase(edgeforge_updates_total{result="rolled_back"}[30m]) > 0
+        labels: { severity: info }
+        annotations:
+          summary: "OTA update of {{ $labels.app }} was rolled back on {{ $labels.instance }}"
+
+      - alert: EdgeArtifactRejected
+        expr: increase(edgeforge_artifact_verifications_total{result="failed"}[30m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "An artifact failed SHA-256 verification on {{ $labels.instance }}"
+
+      - alert: EdgeAppRestarting
+        expr: increase(edgeforge_app_restarts_total[15m]) > 3
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.app }} restarted more than 3 times in 15m"

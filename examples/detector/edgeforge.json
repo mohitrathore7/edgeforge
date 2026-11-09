@@ -1,0 +1,16 @@
+{
+  "name": "detector",
+  "version": "1.0.0",
+  "entrypoint": ["python3", "server.py"],
+  "env": { "PORT": "8081", "MODEL_PATH": "model/labels.txt" },
+  "health": {
+    "probe": { "kind": "http", "url": "http://127.0.0.1:8081/healthz" },
+    "interval_ms": 500,
+    "timeout_ms": 1000,
+    "success_threshold": 3,
+    "failure_threshold": 3,
+    "grace_ms": 10000
+  },
+  "resources": { "memory_max_bytes": 268435456, "cpu_max_millicores": 500 },
+  "restart": { "max_restarts": 5, "backoff_ms": 1000, "stable_ms": 30000 }
+}
