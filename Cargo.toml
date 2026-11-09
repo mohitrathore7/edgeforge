@@ -1,0 +1,48 @@
+[package]
+name = "edgeforge"
+version = "0.4.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Rust-based on-device AI application lifecycle manager: OCI artifacts, A/B updates with automatic rollback, cgroups v2 limits and Prometheus metrics"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/mohitrathore7/edgeforge"
+keywords = ["edge", "ota", "oci", "cgroups", "prometheus"]
+categories = ["command-line-utilities", "embedded"]
+
+[lib]
+name = "edgeforge"
+path = "src/lib.rs"
+
+[[bin]]
+name = "edgeforged"
+path = "src/bin/edgeforged.rs"
+
+[[bin]]
+name = "edgeforge"
+path = "src/bin/edgeforge.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+env_logger = "0.11"
+flate2 = "1"
+hex = "0.4"
+libc = "0.2"
+log = "0.4"
+prometheus = { version = "0.14", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+tar = "0.4"
+thiserror = "2"
+tiny_http = "0.12"
+ureq = "3"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
